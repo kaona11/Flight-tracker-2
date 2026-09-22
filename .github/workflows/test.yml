@@ -1,0 +1,30 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+      - name: Smoke-test the CLI offline
+        run: |
+          qsuite plan --days 330 --provider alaska,ba,qantas,qatar
+          qsuite risk
+          qsuite scan --days 60 --provider fixture --no-terminal --no-save \
+            --html /tmp/cal.html --json /tmp/scan.json
+          test -s /tmp/cal.html

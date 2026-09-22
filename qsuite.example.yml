@@ -1,0 +1,74 @@
+# qsuite configuration. Copy to qsuite.yml and edit.
+# Every value here can be overridden on the command line.
+
+scan:
+  route: YUL-SIN          # Montreal -> Singapore, via Doha on Qatar metal
+  cabin: business         # economy | premium | business | first
+  days: 330               # scan the next 330 days starting tomorrow
+  # start: 2027-01-01     # or pin an explicit range instead of `days`
+  # end:   2027-03-31
+
+  # The default sweep. All three are month-view engines, so the whole range
+  # costs ~12 requests each. Qatar's own site is deliberately NOT here: it has
+  # no month view and the highest account-flag risk. Add it explicitly, and
+  # preferably only to confirm dates these engines already flagged:
+  #   qsuite scan --provider qatar --start 2027-02-10 --end 2027-02-20
+  providers: [alaska, ba, qantas]
+
+runtime:
+  global_concurrency: 6   # how many engines run at once
+  headless: true          # false to watch the browser (browser providers only)
+  # capture_dir: captures # save raw upstream responses, for fixing parsers
+  # proxy:
+  #   server: "http://user:pass@residential-proxy.example:8000"
+
+storage:
+  db_path: data/qsuite.sqlite3   # scan history, so runs can be diffed
+
+output:
+  dir: out
+
+# Credentials never belong in a file you commit. Either set the environment
+# variable directly (QSUITE_BA_USERNAME, QSUITE_QANTAS_TOKEN, ...), or use the
+# `env:VARNAME` indirection below, which reads the named variable at load time.
+credentials:
+  ba_username: "env:BA_USERNAME"
+  ba_password: "env:BA_PASSWORD"
+  qantas_token: "env:QANTAS_TOKEN"
+  qatar_username: "env:QATAR_USERNAME"
+  qatar_password: "env:QATAR_PASSWORD"
+
+providers:
+  ba:
+    # Set true ONLY once you have confirmed with your own eyes that BA's Reward
+    # Flight Finder actually shows Qatar-operated space for this route. Until
+    # then the scanner records BA's empty days as "not seen", never as
+    # "not available" -- an engine that is blind to QR looks identical to one
+    # that sees no availability, and conflating them costs you seats.
+    coverage_verified: false
+    # endpoint: "https://.../{origin}/{destination}/{year}-{month:02d}"
+
+  qantas:
+    # Classic Reward space is invisible when logged out, so the provider
+    # refuses to run anonymously rather than report 330 false negatives.
+    allow_anonymous: false
+
+  qatar:
+    strip_width: 7        # days covered per flexible-date request
+    slow_mo_ms: 120       # deliberate sluggishness; do not lower this
+    # storage_state: qatar-session.json   # reuse a logged-in browser session
+
+alerts:
+  console: true
+  # webhook_url: "env:QSUITE_WEBHOOK_URL"
+  webhook_format: slack   # slack | discord | raw
+  # email_to: you@example.com
+  # email_from: qsuite@example.com
+  # smtp_host: smtp.example.com
+  # smtp_port: 587
+  # smtp_user: qsuite@example.com
+
+  # Noise filters, applied to new dates before anything is sent.
+  qsuite_only: false      # true = only alert when the aircraft confirms Qsuite
+  min_seats: 1
+  # max_miles: 120000

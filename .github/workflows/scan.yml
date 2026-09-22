@@ -1,0 +1,88 @@
+name: Qsuite availability scan
+
+# Requirement 5: run the scan on a schedule and alert only on what's new.
+#
+# The SQLite database is what makes "only new dates" work, so it is cached
+# between runs and uploaded as an artifact. Without it every run would look
+# like a first run and re-announce the entire calendar.
+
+on:
+  schedule:
+    # 07:12 UTC daily. A deliberately odd minute: every scraper in the world
+    # fires at :00, and being in that crowd is a good way to get rate limited.
+    - cron: "12 7 * * *"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Days to scan"
+        default: "330"
+      providers:
+        description: "Comma-separated engines"
+        default: "alaska,ba,qantas"
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install
+        run: pip install -e .
+
+      - name: Restore scan history
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: qsuite-db-${{ github.run_id }}
+          restore-keys: qsuite-db-
+
+      - name: Scan
+        id: scan
+        env:
+          QSUITE_BA_USERNAME: ${{ secrets.QSUITE_BA_USERNAME }}
+          QSUITE_BA_PASSWORD: ${{ secrets.QSUITE_BA_PASSWORD }}
+          QSUITE_QANTAS_TOKEN: ${{ secrets.QSUITE_QANTAS_TOKEN }}
+          QSUITE_WEBHOOK_URL: ${{ secrets.QSUITE_WEBHOOK_URL }}
+        # Exit 2 means "ran, but an engine was blocked" -- worth surfacing in the
+        # job summary, but not worth failing the workflow over, or a single bad
+        # day would stop the scheduled runs entirely.
+        run: |
+          set +e
+          qsuite scan \
+            --days "${{ github.event.inputs.days || '330' }}" \
+            --provider "${{ github.event.inputs.providers || 'alaska,ba,qantas' }}" \
+            --html out/calendar.html \
+            --json out/scan.json \
+            --no-terminal -v
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" = "2" ]; then
+            echo "> One or more engines could not read the whole range this run." \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
+          [ "$code" = "1" ] && exit 1
+          exit 0
+
+      - name: Save scan history
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: qsuite-db-${{ github.run_id }}
+
+      - name: Upload calendar
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qsuite-calendar
+          path: out/
+          retention-days: 30
