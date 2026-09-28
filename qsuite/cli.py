@@ -36,6 +36,17 @@ log = logging.getLogger("qsuite")
 # argument parsing
 # --------------------------------------------------------------------------
 
+def _add_global_flags(target: argparse.ArgumentParser) -> None:
+    """Flags valid either side of the subcommand: `-v scan` and `scan -v`."""
+    target.add_argument("--config", help="path to a YAML config file",
+                        default=argparse.SUPPRESS)
+    target.add_argument("-v", "--verbose", action="count",
+                        default=argparse.SUPPRESS,
+                        help="-v for progress, -vv for debug")
+    target.add_argument("-q", "--quiet", action="store_true",
+                        default=argparse.SUPPRESS)
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="qsuite",
@@ -59,17 +70,12 @@ def build_parser() -> argparse.ArgumentParser:
     # out `qsuite -v scan`. SUPPRESS leaves the attribute absent instead, so
     # whichever parser actually saw the flag wins, and _defaults() fills the
     # rest in afterwards.
+    # Declared once and added to each parser through the public API. An earlier
+    # version copied argparse's private `_actions` between parsers; that broke
+    # on newer Pythons, and this does the same job with nothing private.
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--config", help="path to a YAML config file",
-                        default=argparse.SUPPRESS)
-    common.add_argument("-v", "--verbose", action="count",
-                        default=argparse.SUPPRESS,
-                        help="-v for progress, -vv for debug")
-    common.add_argument("-q", "--quiet", action="store_true",
-                        default=argparse.SUPPRESS)
-    for a in common._actions:
-        if a.dest != "help":
-            p._add_action(a)
+    for target in (p, common):
+        _add_global_flags(target)
     sub = p.add_subparsers(dest="command", required=True)
 
     def add_scan_args(sp: argparse.ArgumentParser) -> None:

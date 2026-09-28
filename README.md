@@ -56,6 +56,17 @@ pip install -e ".[browser]"           # + Qatar's own site (needs a real browser
 playwright install chromium           # only if you installed [browser]
 ```
 
+**On Windows**, use the `py` launcher, which works whether or not `pip` and the
+Scripts directory made it onto PATH:
+
+```powershell
+py -m pip install -e .
+py -m qsuite.cli --help     # equivalent to `qsuite --help`
+```
+
+`py -m qsuite.cli` is the reliable fallback anywhere the `qsuite` command itself
+is not found — same program, no PATH involved.
+
 Try it with no live requests at all:
 
 ```bash
