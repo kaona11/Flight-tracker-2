@@ -176,7 +176,11 @@ qsuite history    what previous scans found (--prune N to trim)
 
 Useful flags: `--provider`, `--start/--end/--days`, `--html`, `--json`,
 `--capture DIR` (save raw responses for fixing parsers), `--no-headless`,
-`--proxy`, `--no-save`, `-v`/`-vv`.
+`--proxy`, `--no-save`, `--no-color`, `-v`/`-vv`.
+
+The terminal calendar sizes itself to your window and only emits colour if the
+terminal will actually render it. If you still see escape codes like
+`<-[2;37m`, pass `--no-color` (or set `NO_COLOR=1`) and the output goes plain.
 
 ## Configuration
 

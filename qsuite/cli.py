@@ -102,6 +102,8 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--json", metavar="PATH", help="write the full result here")
     scan.add_argument("--no-terminal", action="store_true",
                       help="skip the terminal calendar")
+    scan.add_argument("--no-color", action="store_true",
+                      help="plain text, no ANSI colour (also honours NO_COLOR)")
     scan.add_argument("--no-alerts", action="store_true",
                       help="compute the diff but send nothing")
     scan.add_argument("--no-save", action="store_true",
@@ -118,6 +120,8 @@ def build_parser() -> argparse.ArgumentParser:
                        help="randomise each interval by +/- this fraction (default 0.1)")
     watch.add_argument("--max-runs", type=int, help="stop after this many scans")
     watch.add_argument("--html", metavar="PATH", help="rewrite the heatmap after each scan")
+    watch.add_argument("--no-color", action="store_true",
+                       help="plain text, no ANSI colour (also honours NO_COLOR)")
 
     riskp = sub.add_parser("risk", help="per-site bot-detection and calendar-view verdicts", parents=[common])
     riskp.add_argument("--json", action="store_true")
@@ -349,7 +353,8 @@ def _diff_against_previous(store: Optional[Store], result: ScanResult,
 def _emit(result: ScanResult, diff: Optional[Diff], args: argparse.Namespace,
           cfg: Config) -> None:
     if not getattr(args, "no_terminal", False):
-        print(render_terminal(result, diff))
+        color = False if getattr(args, "no_color", False) else None
+        print(render_terminal(result, diff, color=color))
 
     html_path = getattr(args, "html", None)
     if html_path:

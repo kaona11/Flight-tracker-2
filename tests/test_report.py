@@ -94,3 +94,58 @@ def test_json_includes_changes_when_a_diff_is_supplied(scan_result, make, route,
     payload = json.loads(render_json(scan_result, diff))
     assert "changes" in payload
     assert payload["changes"]
+
+
+def test_no_color_is_respected_even_when_stdout_is_a_tty(scan_result, monkeypatch):
+    """--no-color must win over auto-detection, for terminals that mangle ANSI."""
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True, raising=False)
+    assert "\033[" not in render_terminal(scan_result, color=False)
+
+
+def test_no_color_env_var_is_respected(scan_result, monkeypatch):
+    monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True, raising=False)
+    assert "\033[" not in render_terminal(scan_result, color=None)
+
+
+def test_color_is_off_when_output_is_redirected(scan_result, monkeypatch):
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: False, raising=False)
+    assert "\033[" not in render_terminal(scan_result, color=None)
+
+
+def test_color_suppressed_when_the_console_cannot_render_ansi(scan_result, monkeypatch):
+    """A Windows console without VT processing must get plain text.
+
+    Emitting ANSI there prints literal escape sequences that also break the
+    calendar's column alignment -- strictly worse than no colour at all.
+    """
+    monkeypatch.setattr("qsuite.report.terminal._enable_windows_ansi", lambda: False)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True, raising=False)
+    assert "\033[" not in render_terminal(scan_result, color=None)
+    assert "\033[" not in render_terminal(scan_result, color=True)
+
+
+def test_ansi_is_emitted_when_the_console_can_render_it(scan_result, monkeypatch):
+    monkeypatch.setattr("qsuite.report.terminal._enable_windows_ansi", lambda: True)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True, raising=False)
+    assert "\033[" in render_terminal(scan_result, color=None)
+
+
+def test_ansi_enable_is_a_noop_off_windows(monkeypatch):
+    from qsuite.report.terminal import _enable_windows_ansi
+    monkeypatch.setattr("os.name", "posix")
+    assert _enable_windows_ansi() is True
+
+
+def test_month_columns_adapt_to_terminal_width():
+    from qsuite.report.terminal import _months_that_fit
+    assert _months_that_fit(40) == 1      # narrow: one month per row
+    assert _months_that_fit(60) == 2
+    assert _months_that_fit(90) == 3
+    assert _months_that_fit(300) == 4     # capped, so lines stay scannable
+
+
+def test_narrow_terminal_lines_do_not_exceed_the_width(scan_result):
+    out = render_terminal(scan_result, color=False, months_per_row=1)
+    assert max(len(line) for line in out.splitlines() if "·" not in line) < 80

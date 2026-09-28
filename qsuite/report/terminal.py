@@ -9,6 +9,7 @@ from __future__ import annotations
 import calendar
 import datetime as dt
 import os
+import shutil
 import sys
 from typing import Optional
 
@@ -29,17 +30,68 @@ RESET = "\033[0m"
 BOLD = "\033[1m"
 
 
-def _use_color(force: Optional[bool]) -> bool:
-    if force is not None:
-        return force
-    if os.getenv("NO_COLOR"):
+def _enable_windows_ansi() -> bool:
+    """Ask the Windows console to interpret ANSI, and report whether it will.
+
+    Windows Terminal handles ANSI natively, but ``powershell.exe`` in the old
+    console host does not unless a process turns on virtual-terminal
+    processing. Without it our colour codes print as literal ``<-[2;37m``
+    text -- and since each one occupies six visible columns, they also wreck
+    the calendar's alignment by pushing every line past the window width.
+
+    So this is not merely cosmetic: if we cannot turn VT on, colour must be
+    off, because garbled output is far worse than plain output.
+    """
+    if os.name != "nt":
+        return True
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32           # type: ignore[attr-defined]
+        handle = kernel32.GetStdHandle(-11)         # STD_OUTPUT_HANDLE
+        mode = ctypes.c_uint32()
+        if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            return False                            # redirected, or no console
+        enable_vt = 0x0004                          # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+        if mode.value & enable_vt:
+            return True
+        return bool(kernel32.SetConsoleMode(handle, mode.value | enable_vt))
+    except Exception:  # noqa: BLE001 - any failure here just means "no colour"
         return False
-    return sys.stdout.isatty()
+
+
+def _use_color(force: Optional[bool]) -> bool:
+    if force is False:
+        return False
+    if force is None:
+        if os.getenv("NO_COLOR"):
+            return False
+        if not sys.stdout.isatty():
+            return False
+    # Either auto-detection said yes or colour was asked for explicitly. Only
+    # actually emit it if the terminal will render it.
+    return _enable_windows_ansi()
+
+
+def _months_that_fit(width: Optional[int] = None) -> int:
+    """How many month grids fit side by side in the terminal.
+
+    Each grid is GRID_W wide with a 3-space gutter between them. Guessing too
+    many is the difference between a readable calendar and one that soft-wraps
+    into noise, so measure rather than assume 80 columns.
+    """
+    if width is None:
+        width = shutil.get_terminal_size(fallback=(100, 24)).columns
+    fits = (width + 3) // (GRID_W + 3)
+    return max(1, min(4, fits))
 
 
 def render_terminal(result: ScanResult, diff: Optional[Diff] = None, *,
-                    color: Optional[bool] = None, months_per_row: int = 3) -> str:
+                    color: Optional[bool] = None,
+                    months_per_row: Optional[int] = None) -> str:
     use_color = _use_color(color)
+    if months_per_row is None:
+        months_per_row = _months_that_fit()
     views = build_day_views(result)
     lines: list[str] = []
 
