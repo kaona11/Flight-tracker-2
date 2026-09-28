@@ -129,6 +129,17 @@ def build_parser() -> argparse.ArgumentParser:
     plan = sub.add_parser("plan", help="show the request budget without sending anything", parents=[common])
     add_scan_args(plan)
 
+    cal = sub.add_parser("calibrate", parents=[common],
+                         help="turn a request copied from your browser into working config")
+    cal.add_argument("--provider", required=True,
+                     help=f"which engine this request is for: {', '.join(provider_names())}")
+    cal.add_argument("--route", help="the route you searched, e.g. YUL-SIN")
+    cal.add_argument("--date", help="the date you searched, YYYY-MM-DD")
+    cal.add_argument("--curl-file", metavar="PATH",
+                     help="file holding the copied cURL (default: read stdin)")
+    cal.add_argument("--write", metavar="PATH", nargs="?", const="qsuite.yml",
+                     help="append the config to this file (default qsuite.yml)")
+
     hist = sub.add_parser("history", help="summarise previous scans", parents=[common])
     hist.add_argument("--route")
     hist.add_argument("--cabin", choices=[c.value for c in Cabin])
@@ -300,6 +311,70 @@ async def cmd_plan(cfg: Config, args: argparse.Namespace) -> int:
     if naive:
         print(f"Day-by-day on the same engines would be {naive} requests "
               f"({naive / max(1, total_requests):.0f}x more).")
+    return 0
+
+
+def cmd_calibrate(cfg: Config, args: argparse.Namespace) -> int:
+    from .calibrate import calibrate
+
+    if args.provider not in provider_names():
+        print(f"error: unknown provider {args.provider!r}; known: "
+              f"{', '.join(provider_names())}", file=sys.stderr)
+        return 1
+
+    if args.curl_file:
+        text = Path(args.curl_file).read_text()
+    else:
+        print("Paste the copied cURL command, then press Ctrl-Z and Enter "
+              "(Windows) or Ctrl-D (Mac/Linux):\n", file=sys.stderr)
+        text = sys.stdin.read()
+
+    route = Route.parse(args.route) if args.route else cfg.route
+    date = dt.date.fromisoformat(args.date) if args.date else None
+    if date is None:
+        print("warning: no --date given, so only the airport codes will be "
+              "templated. Pass the date you searched to generalise this "
+              "request across months.", file=sys.stderr)
+
+    try:
+        yaml_block, template, notes, dropped = calibrate(
+            text, args.provider, route.origin, route.destination, date)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if dropped:
+        print(f"Dropped {', '.join(dropped)} from the captured request — these "
+              f"are credentials and do not belong in a config file. Set them as "
+              f"environment variables if the engine needs them.\n", file=sys.stderr)
+    for n in notes:
+        print(f"  {n}", file=sys.stderr)
+    if not any("->" in n for n in notes):
+        print("warning: nothing was templated. Check that --route and --date "
+              "match what you actually searched, or this endpoint will query "
+              "the same date every time.", file=sys.stderr)
+    print(file=sys.stderr)
+
+    if args.write:
+        path = Path(args.write)
+        existing = path.read_text() if path.exists() else ""
+        # Appending a second `providers:` key would make the YAML ambiguous.
+        block = yaml_block
+        if "providers:" in existing:
+            block = "\n".join(line for line in yaml_block.splitlines()[1:])
+            print(f"note: {path} already has a `providers:` section — appending "
+                  f"the provider entry only. Check the indentation lines up.",
+                  file=sys.stderr)
+        with path.open("a") as fh:
+            fh.write(("\n" if existing and not existing.endswith("\n") else "")
+                     + block + "\n")
+        print(f"appended to {path}", file=sys.stderr)
+    else:
+        print(yaml_block)
+        print(f"\n# Save that into qsuite.yml, or re-run with --write.\n"
+              f"# Then test it:\n"
+              f"#   qsuite scan --days 30 --provider {args.provider} "
+              f"--capture captures/ -v")
     return 0
 
 
@@ -488,6 +563,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             return asyncio.run(cmd_watch(cfg, args))
         if args.command == "plan":
             return asyncio.run(cmd_plan(cfg, args))
+        if args.command == "calibrate":
+            return cmd_calibrate(cfg, args)
         if args.command == "history":
             return cmd_history(cfg, args)
     except KeyboardInterrupt:

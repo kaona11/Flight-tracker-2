@@ -121,3 +121,16 @@ async def test_preflight_soft_failure_still_scans():
     assert run.requests_made == 3
     assert any("preflight failed" in e for e in run.errors)
     assert {c.status for c in cells} == {Status.NONE}
+
+
+async def test_pacing_can_be_configured():
+    """Config must be able to slow a provider down on a flagged connection."""
+    p = Recording(ProviderContext(options={"concurrency": 1, "delay_s": 0.5}))
+    assert p.concurrency == 1
+    assert p.limiter.min_interval == 0.5
+
+
+async def test_retry_budget_can_be_configured():
+    p = Recording(ProviderContext(options={"max_retries": 5, "retry_base_s": 0.01}))
+    assert p.backoff.max_attempts == 5
+    assert p.backoff.base == 0.01

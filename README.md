@@ -171,6 +171,7 @@ qsuite scan       one full pass: scan, render, diff, alert
 qsuite watch      the same on a loop, alerting only on new dates
 qsuite plan       request budget per engine — sends nothing
 qsuite risk       per-site bot-detection and calendar-view verdicts
+qsuite calibrate  repair a moved endpoint from a browser-captured request
 qsuite history    what previous scans found (--prune N to trim)
 ```
 

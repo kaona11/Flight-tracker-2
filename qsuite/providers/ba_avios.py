@@ -25,6 +25,7 @@ from typing import Any
 from ..models import Cabin, Cell, Route, WindowKind
 from ..ranges import Window
 from ._calendar import parse_day_nodes
+from ._endpoint import resolve
 from ._http import get_json
 from .base import BlockedError, Provider, ProviderContext
 
@@ -81,14 +82,13 @@ class BritishAirwaysProvider(Provider):
     async def fetch_window(self, window: Window, route: Route, cabin: Cabin) -> list[Cell]:
         if self.ctx.dry_run:
             return []
-        url = self.endpoint.format(
-            origin=route.origin, destination=route.destination,
-            year=window.start.year, month=window.start.month,
+        url, params = resolve(
+            self.endpoint, route, window, CABIN_CODE[cabin],
+            default_params={"cabin": CABIN_CODE[cabin], "adults": 1},
         )
         payload = await get_json(
-            self.ctx, url,
-            params={"cabin": CABIN_CODE[cabin], "adults": 1},
-            headers={"Referer": LANDING},
+            self.ctx, url, params=params,
+            headers={"Referer": LANDING, **self.ctx.options.get("headers", {})},
             capture_tag=f"ba-{route}-{window.start:%Y-%m}",
         )
         return parse_month(payload, window, route, cabin,

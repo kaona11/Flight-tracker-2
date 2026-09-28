@@ -39,6 +39,19 @@ credentials:
   qatar_password: "env:QATAR_PASSWORD"
 
 providers:
+  # Every provider accepts these. `endpoint` is the important one: these APIs
+  # are undocumented and they move, so when a provider starts returning
+  # "Request failed", recapture it with `qsuite calibrate` rather than editing
+  # code. A template carrying its own query string replaces the built-in
+  # parameters entirely, so a captured browser request can be used verbatim.
+  #
+  #   endpoint: full URL template. Placeholders: {origin} {destination}
+  #             {year} {month} {month02} {date} {date_ddmmyyyy}
+  #             {date_mmddyyyy} {date_compact} {cabin} {adults}
+  #   headers:  extra request headers (never put credentials here)
+  #   delay_s / concurrency:  pace this engine more slowly than the default
+  #   max_retries / retry_base_s:  how hard to retry a failed window
+
   ba:
     # Set true ONLY once you have confirmed with your own eyes that BA's Reward
     # Flight Finder actually shows Qatar-operated space for this route. Until
@@ -46,7 +59,7 @@ providers:
     # "not available" -- an engine that is blind to QR looks identical to one
     # that sees no availability, and conflating them costs you seats.
     coverage_verified: false
-    # endpoint: "https://.../{origin}/{destination}/{year}-{month:02d}"
+    # endpoint: "https://.../{origin}/{destination}/{year}-{month02}"
 
   qantas:
     # Classic Reward space is invisible when logged out, so the provider

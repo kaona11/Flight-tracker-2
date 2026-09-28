@@ -19,6 +19,7 @@ from typing import Any
 from ..models import Cabin, Cell, Route, WindowKind
 from ..ranges import Window
 from ._calendar import parse_day_nodes
+from ._endpoint import resolve
 from ._http import get_json
 from .base import Provider, ProviderContext, ProviderError
 
@@ -60,12 +61,13 @@ class QantasProvider(Provider):
     async def fetch_window(self, window: Window, route: Route, cabin: Cabin) -> list[Cell]:
         if self.ctx.dry_run:
             return []
-        headers = {"Referer": "https://www.qantas.com/"}
+        headers = {"Referer": "https://www.qantas.com/",
+                   **self.ctx.options.get("headers", {})}
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
-        payload = await get_json(
-            self.ctx, self.endpoint,
-            params={
+        url, params = resolve(
+            self.endpoint, route, window, CABIN_CODE[cabin],
+            default_params={
                 "origin": route.origin,
                 "destination": route.destination,
                 "month": f"{window.start.year}-{window.start.month:02d}",
@@ -73,7 +75,9 @@ class QantasProvider(Provider):
                 "adults": 1,
                 "fareType": "classic-reward",
             },
-            headers=headers,
+        )
+        payload = await get_json(
+            self.ctx, url, params=params, headers=headers,
             capture_tag=f"qantas-{route}-{window.start:%Y-%m}",
         )
         return parse_month(payload, window, route, cabin)

@@ -18,6 +18,7 @@ from typing import Any
 from ..models import Cabin, Cell, Route, WindowKind
 from ..ranges import Window
 from ._calendar import parse_day_nodes
+from ._endpoint import resolve
 from ._http import get_json
 from .base import Provider, ProviderContext
 
@@ -44,9 +45,9 @@ class AlaskaProvider(Provider):
     async def fetch_window(self, window: Window, route: Route, cabin: Cabin) -> list[Cell]:
         if self.ctx.dry_run:
             return []
-        payload = await get_json(
-            self.ctx, self.endpoint,
-            params={
+        url, params = resolve(
+            self.endpoint, route, window, CABIN_CODE[cabin],
+            default_params={
                 "O": route.origin,
                 "D": route.destination,
                 "OD": window.start.isoformat(),
@@ -57,7 +58,11 @@ class AlaskaProvider(Provider):
                 "ShoppingMethod": "onlineaward",
                 "CabinClass": CABIN_CODE[cabin],
             },
-            headers={"Referer": "https://www.alaskaair.com/planbook"},
+        )
+        payload = await get_json(
+            self.ctx, url, params=params,
+            headers={"Referer": "https://www.alaskaair.com/planbook",
+                     **self.ctx.options.get("headers", {})},
             capture_tag=f"alaska-{route}-{window.start:%Y-%m}",
         )
         return parse_month(payload, window, route, cabin)

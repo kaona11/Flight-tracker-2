@@ -72,12 +72,24 @@ class Provider(abc.ABC):
                  delay_s: float | None = None) -> None:
         self.ctx = ctx
         profile = risk.get(self.name)
-        self.concurrency = concurrency or (profile.recommended_concurrency if profile
-                                           else self.default_concurrency)
-        delay = delay_s if delay_s is not None else (
-            profile.recommended_delay_s if profile else self.default_delay_s)
+        # Precedence: explicit argument, then config, then the risk profile's
+        # recommendation. Config can only be used to go *slower* in practice --
+        # the recommendations are already at the polite end -- but it is there
+        # so someone on a flagged IP can back off without editing code.
+        if concurrency is None:
+            concurrency = ctx.options.get("concurrency")
+        if delay_s is None:
+            delay_s = ctx.options.get("delay_s")
+        self.concurrency = int(concurrency or (profile.recommended_concurrency
+                                               if profile else self.default_concurrency))
+        delay = float(delay_s if delay_s is not None
+                      else (profile.recommended_delay_s if profile
+                            else self.default_delay_s))
         self.limiter = RateLimiter(delay)
-        self.backoff = Backoff()
+        self.backoff = Backoff(
+            base=float(ctx.options.get("retry_base_s", 2.0)),
+            max_attempts=int(ctx.options.get("max_retries", 3)),
+        )
 
     # ---- subclass surface -------------------------------------------------
 
