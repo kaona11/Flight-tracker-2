@@ -14,6 +14,7 @@ import asyncio
 import datetime as dt
 import logging
 import random
+import shlex
 import sys
 from pathlib import Path
 from typing import Optional
@@ -135,6 +136,10 @@ def build_parser() -> argparse.ArgumentParser:
                      help=f"which engine this request is for: {', '.join(provider_names())}")
     cal.add_argument("--route", help="the route you searched, e.g. YUL-SIN")
     cal.add_argument("--date", help="the date you searched, YYYY-MM-DD")
+    cal.add_argument("--url", metavar="URL",
+                     help="the request URL on its own — the simplest input, and "
+                          "the one that needs no clipboard or cURL parsing. Read "
+                          "it off the DevTools Headers tab ('Request URL').")
     cal.add_argument("--curl-file", metavar="PATH",
                      help="file holding the copied cURL (default: read stdin)")
     cal.add_argument("--write", metavar="PATH", nargs="?", const="qsuite.yml",
@@ -322,7 +327,12 @@ def cmd_calibrate(cfg: Config, args: argparse.Namespace) -> int:
               f"{', '.join(provider_names())}", file=sys.stderr)
         return 1
 
-    if args.curl_file:
+    if args.url:
+        # A bare URL is all the templating actually needs; the cURL form only
+        # ever added headers. Quoting a URL on a command line is far less
+        # fiddly than getting a multi-line command through a shell.
+        text = f"curl {shlex.quote(args.url)}"
+    elif args.curl_file:
         text = Path(args.curl_file).read_text()
     else:
         # Only prompt when someone is actually there to read it. When stdin is

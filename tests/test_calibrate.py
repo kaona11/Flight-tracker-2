@@ -145,3 +145,21 @@ def test_crlf_line_endings_are_handled():
     """Clipboard text on Windows carries \\r\\n."""
     cap = parse_curl("curl \\\r\n 'https://x/y' \\\r\n -H 'accept: application/json'")
     assert cap.url == "https://x/y"
+
+
+def test_a_bare_url_is_enough_to_calibrate():
+    """--url exists so calibration never depends on a working clipboard."""
+    url = ("https://www.alaskaair.com/search/calendar/__data.json"
+           "?O=YUL&D=SIN&OD=2026-10-01&A=1&RT=false")
+    yaml_block, template, notes, dropped = calibrate(
+        f"curl '{url}'", "alaska", "YUL", "SIN", DATE)
+    assert "{origin}" in template and "{destination}" in template
+    assert "{date}" in template
+    assert dropped == []
+
+
+def test_url_with_ampersands_survives_quoting():
+    import shlex
+    url = "https://x/api?a=1&b=2&c=3"
+    cap = parse_curl(f"curl {shlex.quote(url)}")
+    assert cap.url == url
