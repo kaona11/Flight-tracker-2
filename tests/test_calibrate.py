@@ -163,3 +163,50 @@ def test_url_with_ampersands_survives_quoting():
     url = "https://x/api?a=1&b=2&c=3"
     cap = parse_curl(f"curl {shlex.quote(url)}")
     assert cap.url == url
+
+
+REAL_ALASKA_URL = (
+    "https://www.alaskaair.com/search/calendar/__data.json"
+    "?O=YUL&D=SIN&OD=2026-10-01&A=1&RT=false&RequestType=Calendar"
+    "&ShoppingMethod=onlineaward&int=flightresultsmicrosite%3Aviewby-calendar"
+    "&locale=en-us&CM=2026-10&FareType=Lowest+price+available"
+    "&x-sveltekit-invalidated=01"
+)
+
+
+def test_plus_encoded_values_are_not_turned_into_spaces():
+    """`FareType=Lowest+price+available` must survive byte-for-byte.
+
+    Decoding and re-joining without re-encoding would put raw spaces in the
+    query string and break the request.
+    """
+    template, _ = templatise(REAL_ALASKA_URL, "YUL", "SIN", DATE)
+    assert "FareType=Lowest+price+available" in template
+    assert "Lowest price available" not in template
+
+
+def test_percent_encoded_values_are_preserved():
+    template, _ = templatise(REAL_ALASKA_URL, "YUL", "SIN", DATE)
+    assert "int=flightresultsmicrosite%3Aviewby-calendar" in template
+    assert "%3A" in template
+
+
+def test_calendar_month_parameter_is_templated():
+    """CM=YYYY-MM is what makes one capture serve every month of a scan."""
+    template, _ = templatise(REAL_ALASKA_URL, "YUL", "SIN", DATE)
+    assert "CM={year}-{month02}" in template
+
+
+def test_real_capture_templates_the_route_and_both_date_forms():
+    template, notes = templatise(REAL_ALASKA_URL, "YUL", "SIN", DATE)
+    assert "O={origin}" in template
+    assert "D={destination}" in template
+    assert "OD={date}" in template
+    assert len(notes) == 4
+
+
+def test_the_shipped_alaska_default_matches_the_capture():
+    """The default endpoint must be exactly what calibrate would produce."""
+    from qsuite.providers.alaska import DEFAULT_ENDPOINT
+    template, _ = templatise(REAL_ALASKA_URL, "YUL", "SIN", DATE)
+    assert DEFAULT_ENDPOINT == template

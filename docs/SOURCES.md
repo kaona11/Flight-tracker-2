@@ -47,12 +47,36 @@ returns a month at a time. The site is a SvelteKit app, so the calendar route
 (`/search/calendar?O=…&D=…&OD=…`) loads its data from a sibling
 `__data.json` endpoint carrying the same query parameters.
 
-**Payload format:** that endpoint does *not* return ordinary JSON. SvelteKit
-serves a `devalue`-flattened graph — one flat array in which every nested value
-is an integer index into that same array. Left undecoded it parses as valid
-JSON containing no dates at all, so the scanner decodes it transparently in the
-HTTP layer (`providers/_sveltekit.py`) before any parser sees it. If you
-recalibrate another SvelteKit-based engine, this is handled for you.
+**Confirmed endpoint** (captured from a real session, 2026-09-29):
+
+```
+https://www.alaskaair.com/search/calendar/__data.json
+  ?O=YUL&D=SIN&OD=2026-10-01&A=1&RT=false
+  &RequestType=Calendar&ShoppingMethod=onlineaward
+  &int=flightresultsmicrosite%3Aviewby-calendar&locale=en-us
+  &CM=2026-10&FareType=Lowest+price+available&x-sveltekit-invalidated=01
+```
+
+`RequestType=Calendar` selects the month grid, `ShoppingMethod=onlineaward`
+selects award inventory rather than cash fares, and **`CM=YYYY-MM` is the month**
+— which is what makes one request cover ~30 days. A 330-day scan is 12 requests.
+
+**Payload format:** the response is `Content-Type: text/sveltekit-data` and does
+*not* contain ordinary JSON. SvelteKit serves a `devalue`-flattened graph — one
+flat array in which every nested value is an integer index into that same array.
+Left undecoded it parses as valid JSON containing no dates at all, so the scanner
+decodes it transparently in the HTTP layer (`providers/_sveltekit.py`) before any
+parser sees it. If you recalibrate another SvelteKit-based engine, this is
+handled for you.
+
+**Unverified: cabin filtering.** The captured request carries *no cabin
+parameter*. It asks for `FareType=Lowest+price+available`, which reads like
+"cheapest seat in any cabin". If that is what it means, an Alaska hit says
+something is available on that date, not necessarily business. The parser only
+counts a date when the payload itself reports business availability, so the
+failure mode is a missed date rather than a false one — but until a real
+response confirms the payload carries per-cabin detail, treat Alaska as a coarse
+first filter rather than a business-class answer.
 
 **Why it leads the default sweep:** it is the only engine in the set that shows
 award calendars *without a login*. No login means no frequent-flyer account to

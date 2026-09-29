@@ -24,7 +24,7 @@ import re
 import shlex
 from dataclasses import dataclass, field
 from typing import Optional
-from urllib.parse import parse_qsl, urlsplit, urlunsplit
+from urllib.parse import unquote_plus, urlsplit, urlunsplit
 
 #: Headers worth keeping. Everything else is either noise, per-request state
 #: that will be stale by the next run, or a credential we refuse to write into
@@ -136,30 +136,43 @@ def templatise(url: str, route_origin: str, route_dest: str,
             f"{date.year}-{date.month:02d}": "{year}-{month02}",
         })
 
-    def swap(value: str) -> str:
+    def swap(raw: str) -> str:
+        """Replace a value with a placeholder, or return it byte-for-byte.
+
+        Matching is done on the *decoded* value, because that is what the user
+        typed into the search box. Anything that does not match is returned
+        exactly as it arrived -- never re-encoded. A real captured URL carries
+        things like ``FareType=Lowest+price+available`` and
+        ``int=...%3Aviewby-calendar``; decoding those and re-joining them
+        without re-encoding would put raw spaces and colons into the query and
+        break the request.
+        """
+        decoded = unquote_plus(raw)
         # Longest first, so a full date is matched before its year-month prefix.
         for needle in sorted(subs, key=len, reverse=True):
-            if value == needle:
+            if decoded == needle or raw == needle:
                 return subs[needle]
-        return value
+        return raw
 
-    pairs = parse_qsl(parts.query, keep_blank_values=True)
     new_pairs: list[tuple[str, str]] = []
-    for key, value in pairs:
+    for chunk in parts.query.split("&"):
+        if not chunk:
+            continue
+        key, _, value = chunk.partition("=")
         swapped = swap(value)
         if swapped != value:
             notes.append(f"query {key}={value} -> {swapped}")
         new_pairs.append((key, swapped))
 
-    segments = parts.path.split("/")
     new_segments = []
-    for seg in segments:
+    for seg in parts.path.split("/"):
         swapped = swap(seg)
         if swapped != seg:
             notes.append(f"path segment {seg} -> {swapped}")
         new_segments.append(swapped)
 
-    # urlencode would percent-encode our braces back into %7B.
+    # Built by hand rather than with urlencode, which would percent-encode our
+    # braces into %7B and re-encode values we deliberately left untouched.
     query = "&".join(f"{k}={v}" for k, v in new_pairs) if new_pairs else ""
     template = urlunsplit((parts.scheme, parts.netloc, "/".join(new_segments),
                            query, ""))
