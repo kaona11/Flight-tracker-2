@@ -43,7 +43,16 @@ Qsuite", not a guarantee.
 ## Alaska Airlines — best first target
 
 **Calendar:** a flexible-date award calendar is a first-class part of the UI and
-returns a month at a time.
+returns a month at a time. The site is a SvelteKit app, so the calendar route
+(`/search/calendar?O=…&D=…&OD=…`) loads its data from a sibling
+`__data.json` endpoint carrying the same query parameters.
+
+**Payload format:** that endpoint does *not* return ordinary JSON. SvelteKit
+serves a `devalue`-flattened graph — one flat array in which every nested value
+is an integer index into that same array. Left undecoded it parses as valid
+JSON containing no dates at all, so the scanner decodes it transparently in the
+HTTP layer (`providers/_sveltekit.py`) before any parser sees it. If you
+recalibrate another SvelteKit-based engine, this is handled for you.
 
 **Why it leads the default sweep:** it is the only engine in the set that shows
 award calendars *without a login*. No login means no frequent-flyer account to

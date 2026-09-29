@@ -71,9 +71,26 @@ async def get_json(ctx, url: str, *, params: dict | None = None,
     if resp.status_code >= 400:
         raise ProviderError(f"HTTP {resp.status_code} from {url}")
     try:
-        return resp.json()
+        payload = resp.json()
     except Exception as exc:  # noqa: BLE001
         raise ProviderError(f"response from {url} was not JSON: {exc}") from exc
+    return normalise_payload(payload)
+
+
+def normalise_payload(payload: Any) -> Any:
+    """Undo transport-level encodings before any provider sees the data.
+
+    Right now that means SvelteKit's flattened ``__data.json`` format, which
+    several airline sites now serve. Decoding here rather than in each parser
+    keeps it where it belongs -- it is a property of how the response was
+    transmitted, not of what the airline is telling us.
+    """
+    from ._sveltekit import decode, looks_like_sveltekit
+
+    if looks_like_sveltekit(payload):
+        log.debug("decoded a SvelteKit __data.json payload")
+        return decode(payload)
+    return payload
 
 
 def _capture(ctx, tag: str | None, url: str, status: int, body: str) -> None:
