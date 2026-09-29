@@ -127,3 +127,21 @@ def test_non_curl_input_is_rejected_clearly():
 def test_missing_url_is_rejected():
     with pytest.raises(ValueError, match="no URL found"):
         parse_curl("curl -H 'accept: application/json'")
+
+
+def test_multiline_pasted_curl_is_parsed():
+    """Clipboard text arrives with real newlines and backslash continuations."""
+    cap = parse_curl(CHROME_CURL)
+    assert cap.headers["referer"] == "https://www.alaskaair.com/search"
+
+
+def test_windows_caret_continuations_are_handled():
+    cap = parse_curl("curl ^\n 'https://x/y' ^\n -H 'accept: application/json'")
+    assert cap.url == "https://x/y"
+    assert cap.headers["accept"] == "application/json"
+
+
+def test_crlf_line_endings_are_handled():
+    """Clipboard text on Windows carries \\r\\n."""
+    cap = parse_curl("curl \\\r\n 'https://x/y' \\\r\n -H 'accept: application/json'")
+    assert cap.url == "https://x/y"

@@ -325,9 +325,26 @@ def cmd_calibrate(cfg: Config, args: argparse.Namespace) -> int:
     if args.curl_file:
         text = Path(args.curl_file).read_text()
     else:
-        print("Paste the copied cURL command, then press Ctrl-Z and Enter "
-              "(Windows) or Ctrl-D (Mac/Linux):\n", file=sys.stderr)
+        # Only prompt when someone is actually there to read it. When stdin is
+        # a pipe -- the recommended path, `Get-Clipboard | qsuite calibrate` --
+        # a prompt is just noise in the output.
+        if sys.stdin.isatty():
+            print("Paste the copied cURL command, then send end-of-input:\n"
+                  "  Windows  Ctrl-Z then Enter\n"
+                  "  Mac/Linux  Ctrl-D\n"
+                  "\nEasier: pipe the clipboard in instead and skip this prompt --\n"
+                  "  Windows    Get-Clipboard | qsuite calibrate --provider ...\n"
+                  "  Mac        pbpaste | qsuite calibrate --provider ...\n"
+                  "  Linux      xclip -o | qsuite calibrate --provider ...\n"
+                  "or save it to a file and pass --curl-file.\n", file=sys.stderr)
         text = sys.stdin.read()
+
+    if not text.strip():
+        print("error: no input received. Pipe the clipboard in "
+              "(Get-Clipboard | ... on Windows, pbpaste | ... on Mac) or use "
+              "--curl-file, which avoids end-of-input handling entirely.",
+              file=sys.stderr)
+        return 1
 
     route = Route.parse(args.route) if args.route else cfg.route
     date = dt.date.fromisoformat(args.date) if args.date else None
